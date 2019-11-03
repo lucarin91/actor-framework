@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 project(caf C CXX)
 
 include(CheckCSourceCompiles)
@@ -8,6 +8,7 @@ include(CheckCSourceRuns)
 # See https://cmake.org/cmake/help/latest/module/GNUInstallDirs.html
 include(GNUInstallDirs)
 
+# Check whether we are running as CMake subdirectory.
 get_directory_property(_parent PARENT_DIRECTORY)
 if(_parent)
   set(caf_is_subproject ON)
@@ -15,6 +16,38 @@ else()
   set(caf_is_subproject OFF)
 endif()
 unset(_parent)
+
+if(NOT CMAKE_CROSSCOMPILING)
+  # Check whether the user already provided flags that enable C++ >= 17.
+  try_compile(caf_has_cxx_17
+              "${CMAKE_CURRENT_BINARY_DIR}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/check-compiler-features.cpp")
+  # Try enabling C++17 mode if user-provided flags aren't sufficient.
+  if(NOT caf_has_cxx_17)
+    if(MSVC)
+      set(cxx_flag "/std:c++17")
+    else()
+      if(CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+         AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5)
+        set(cxx_flag "-std=c++1z")
+      else()
+        set(cxx_flag "-std=c++17")
+      endif()
+    endif()
+    # Re-run compiler check.
+    try_compile(caf_has_cxx_17
+                "${CMAKE_CURRENT_BINARY_DIR}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/check-compiler-features.cpp"
+                COMPILE_DEFINITIONS "${cxx_flag}"
+                OUTPUT_VARIABLE cxx_check_output)
+    if(NOT caf_has_cxx_17)
+      MESSAGE(FATAL_ERROR "\nFatal error: unable activate C++17 mode!\
+                           \nPlease see README.md for supported compilers.\
+                           \n\ntry_compile output:\n${cxx_check_output}")
+    endif()
+    add_compile_options("${cxx_flag}")
+  endif()
+endif()
 
 # Be nice to VIM users and Clang tools.
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
@@ -230,61 +263,27 @@ endif()
 #                                compiler setup                                #
 ################################################################################
 
-# leave compiler flags alone when building as subdirectory
-
-if (NOT caf_is_subproject)
-  # check for g++ >= 4.8 or clang++ > = 3.2
-  if(NOT WIN32 AND NOT CAF_NO_COMPILER_CHECK AND NOT CMAKE_CROSSCOMPILING)
-    try_run(ProgramResult
-            CompilationSucceeded
-            "${CMAKE_CURRENT_BINARY_DIR}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_compiler_version.cpp"
-            RUN_OUTPUT_VARIABLE CompilerVersion)
-    if(NOT CompilationSucceeded OR NOT ProgramResult EQUAL 0)
-      message(FATAL_ERROR "Cannot determine compiler version")
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-      if(CompilerVersion VERSION_GREATER 4.7)
-        message(STATUS "Found g++ version ${CompilerVersion}")
-      else()
-        message(FATAL_ERROR "g++ >= 4.8 required (found: ${CompilerVersion})")
-      endif()
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-      if(CompilerVersion VERSION_GREATER 3.1)
-        message(STATUS "Found clang++ version ${CompilerVersion}")
-      else()
-        message(FATAL_ERROR "clang++ >= 3.2 required (found: ${CompilerVersion})")
-      endif()
-    else()
-      message(FATAL_ERROR "Your C++ compiler does not support C++11 "
-                          "or is not supported")
-    endif()
-  endif()
-  # set optional build flags
-  # increase max. template depth on GCC and Clang
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang"
-     OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    build_string("EXTRA_FLAGS" "-ftemplate-depth=512 -ftemplate-backtrace-limit=0")
-  endif()
-  # explicitly disable obnoxious GCC warnings
-  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    build_string("EXTRA_FLAGS" "-Wno-missing-field-initializers")
-  endif()
-  # add "-Werror" flag if --pedantic-build is used
-  if(CAF_CXX_WARNINGS_AS_ERRORS)
-    build_string("EXTRA_FLAGS" "-Werror")
-  endif()
-  # set compiler flags for GCOV if requested
-  if(CAF_ENABLE_GCOV)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-      set(NO_INLINE "-fno-inline")
-    else()
-      set(NO_INLINE "-fno-inline -fno-inline-small-functions -fno-default-inline")
-    endif()
-    build_string("EXTRA_FLAGS" "-fprofile-arcs -ftest-coverage ${NO_INLINE}")
-  endif()
-  # set -fno-exception if requested
-  if(CAF_FORCE_NO_EXCEPTIONS)
-    build_string("EXTRA_FLAGS" "-fno-exceptions")
+# set optional build flags
+# increase max. template depth on GCC and Clang
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+   OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+  add_compile_options("-ftemplate-depth=512"
+                      "-ftemplate-backtrace-limit=0")
+endif()
+# explicitly disable obnoxious GCC warnings
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+  build_string("EXTRA_FLAGS" "-Wno-missing-field-initializers")
+endif()
+# add "-Werror" flag if --pedantic-build is used
+if(CAF_CXX_WARNINGS_AS_ERRORS)
+  build_string("EXTRA_FLAGS" "-Werror")
+endif()
+# set compiler flags for GCOV if requested
+if(CAF_ENABLE_GCOV)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(NO_INLINE "-fno-inline")
+  else()
+    set(NO_INLINE "-fno-inline -fno-inline-small-functions -fno-default-inline")
   endif()
   # enable a ton of warnings if --more-clang-warnings is used
   if(CAF_MORE_WARNINGS)
@@ -321,74 +320,42 @@ if (NOT caf_is_subproject)
     string(REPLACE ";" "" WFLAGS_STR ${WFLAGS})
     build_string("EXTRA_FLAGS" "${WFLAGS_STR}")
   endif()
-  # allow enabling IPO on gcc/clang
-  if(POLICY CMP0069)
-    cmake_policy(SET CMP0069 NEW)
-  else()
-    if(CMAKE_INTERPROCEDURAL_OPTIMIZATION)
-      if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        build_string("EXTRA_FLAGS" "-flto")
-      elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        build_string("EXTRA_FLAGS" "-flto -fno-fat-lto-objects")
-      endif()
-    endif()
-  endif()
+endif()
 
-  # add -stdlib=libc++ when using Clang if possible
-  if(NOT CAF_NO_AUTO_LIBCPP AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set(CXXFLAGS_BACKUP "${CMAKE_CXX_FLAGS}")
-    if(NOT APPLE AND NOT WIN32)
-      set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++ -pthread")
-    else()
-      set(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
-    endif()
-    try_run(ProgramResult
-            CompilationSucceeded
-            "${CMAKE_CURRENT_BINARY_DIR}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_compiler_version.cpp"
-            RUN_OUTPUT_VARIABLE CompilerVersion)
-    if(NOT CompilationSucceeded OR NOT ProgramResult EQUAL 0)
-      message(STATUS "Use clang with GCC' libstdc++")
-    else()
-      message(STATUS "Automatically added '-stdlib=libc++' flag "
-                     "(CAF_NO_AUTO_LIBCPP not defined)")
-    build_string("EXTRA_FLAGS" "-stdlib=libc++")
-    endif()
-    # restore CXX flags
-    set(CMAKE_CXX_FLAGS "${CXXFLAGS_BACKUP}")
-  endif()
-  # enable address sanitizer if requested by the user
-  if(CAF_ENABLE_ADDRESS_SANITIZER AND NOT WIN32)
-    # check whether address sanitizer is available
-    set(CXXFLAGS_BACKUP "${CMAKE_CXX_FLAGS}")
-    set(CMAKE_CXX_FLAGS "-fsanitize=address -fno-omit-frame-pointer")
-    try_run(ProgramResult
-            CompilationSucceeded
-            "${CMAKE_CURRENT_BINARY_DIR}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_compiler_version.cpp")
-    if(NOT CompilationSucceeded)
-      message(WARNING "Address Sanitizer is not available on selected compiler")
-    else()
-      message(STATUS "Enable Address Sanitizer")
-      build_string("EXTRA_FLAGS" "-fsanitize=address -fno-omit-frame-pointer")
-    endif()
-    # restore CXX flags
-    set(CMAKE_CXX_FLAGS "${CXXFLAGS_BACKUP}")
-  endif()
-  # -pthread is ignored on MacOSX but required on other platforms
-  if(NOT APPLE AND NOT WIN32)
-      build_string("EXTRA_FLAGS" "-pthread")
-  endif()
-  # -fPIC generates warnings on MinGW and Cygwin plus extra setup steps needed on MinGW
-  if(MINGW)
-    add_definitions(-D_WIN32_WINNT=0x0600)
-    add_definitions(-DWIN32)
-    include(GenerateExportHeader)
-    list(APPEND CAF_EXTRA_LDFLAGS -lws2_32 -liphlpapi -lpsapi)
-    # build static to avoid runtime dependencies to GCC libraries
-    build_string("EXTRA_FLAGS" "-static")
-  elseif(CYGWIN)
-    build_string("EXTRA_FLAGS" "-U__STRICT_ANSI__")
+# enable address sanitizer if requested by the user
+if(CAF_ENABLE_ADDRESS_SANITIZER AND NOT WIN32)
+  add_compile_options("-fsanitize=address"
+                      "-fno-omit-frame-pointer")
+  list(APPEND CAF_EXTRA_LDFLAGS "-fsanitize=address")
+endif()
+# -pthread is ignored on MacOSX but required on other platforms
+if(NOT APPLE AND NOT WIN32)
+    build_string("EXTRA_FLAGS" "-pthread")
+endif()
+# -fPIC generates warnings on MinGW and Cygwin plus extra setup steps needed on MinGW
+if(MINGW)
+  add_definitions(-D_WIN32_WINNT=0x0600)
+  add_definitions(-DWIN32)
+  include(GenerateExportHeader)
+  list(APPEND CAF_EXTRA_LDFLAGS -lws2_32 -liphlpapi -lpsapi)
+  # build static to avoid runtime dependencies to GCC libraries
+  build_string("EXTRA_FLAGS" "-static")
+elseif(CYGWIN)
+  build_string("EXTRA_FLAGS" "-U__STRICT_ANSI__")
+else()
+  build_string("EXTRA_FLAGS" "-fPIC")
+endif()
+if (WIN32)
+  list(APPEND CAF_EXTRA_LDFLAGS ws2_32 iphlpapi)
+endif()
+# iOS support
+if(CAF_OSX_SYSROOT)
+  set(CMAKE_OSX_SYSROOT "${CAF_OSX_SYSROOT}")
+endif()
+if(CAF_IOS_DEPLOYMENT_TARGET)
+  if(CAF_OSX_SYSROOT STREQUAL "iphonesimulator")
+    build_string("EXTRA_FLAGS"
+                 "-mios-simulator-version-min=${CAF_IOS_DEPLOYMENT_TARGET}")
   else()
     build_string("EXTRA_FLAGS" "-fPIC")
   endif()
@@ -436,6 +403,30 @@ if (NOT caf_is_subproject)
   if (DEFINED CMAKE_LD_LIBS)
     list(APPEND ${CMAKE_LD_LIBS})
   endif()
+endif()
+# check if the user provided CXXFLAGS, set defaults otherwise
+if(NOT CMAKE_CXX_FLAGS)
+  set(CMAKE_CXX_FLAGS                   "-Wextra -Wall -pedantic ${EXTRA_FLAGS}")
+endif()
+if(NOT CMAKE_CXX_FLAGS_DEBUG)
+  set(CMAKE_CXX_FLAGS_DEBUG             "-O0 -g")
+endif()
+if(NOT CMAKE_CXX_FLAGS_MINSIZEREL)
+  set(CMAKE_CXX_FLAGS_MINSIZEREL        "-Os")
+endif()
+if(NOT CMAKE_CXX_FLAGS_RELEASE)
+  set(CMAKE_CXX_FLAGS_RELEASE           "-O3 -DNDEBUG")
+endif()
+if(NOT CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO    "-O2 -g -fno-omit-frame-pointer")
+endif()
+# set build default build type to RelWithDebInfo if not set
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+# needed by subprojects
+if (DEFINED CMAKE_LD_LIBS)
+  list(APPEND ${CMAKE_LD_LIBS})
 endif()
 
 ################################################################################
