@@ -60,8 +60,7 @@ constexpr caf::timespan ms(ms_t::rep x) {
 
 } // namespace
 
-namespace caf {
-namespace defaults {
+namespace caf::defaults {
 
 namespace stream {
 
@@ -117,5 +116,4 @@ const size_t workers = min(3u, std::thread::hardware_concurrency() / 4u) + 1;
 
 } // namespace middleman
 
-} // namespace defaults
 } // namespace caf

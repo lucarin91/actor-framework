@@ -20,9 +20,7 @@
 
 #include "caf/sec.hpp"
 
-namespace caf {
-namespace io {
-namespace basp {
+namespace caf::io::basp {
 
 /// @addtogroup BASP
 
@@ -101,8 +99,6 @@ inline std::string to_string(connection_state x) {
 
 /// @}
 
-} // namespace basp
-} // namespace io
 } // namespace caf
 
 

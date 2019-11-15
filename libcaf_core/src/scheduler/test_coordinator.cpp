@@ -25,8 +25,7 @@
 #include "caf/raise_error.hpp"
 #include "caf/resumable.hpp"
 
-namespace caf {
-namespace scheduler {
+namespace caf::scheduler {
 
 namespace {
 
@@ -169,5 +168,4 @@ void test_coordinator::inline_all_enqueues_helper() {
   run_once_lifo();
 }
 
-} // namespace scheduler
 } // namespace caf
