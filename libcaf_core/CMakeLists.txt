@@ -37,8 +37,6 @@ set(LIBCAF_CORE_SRCS
   src/actor_registry.cpp
   src/actor_system.cpp
   src/actor_system_config.cpp
-  src/affinity_manager.cpp
-  src/affinity_parser.cpp
   src/atom.cpp
   src/attachable.cpp
   src/behavior.cpp
@@ -55,6 +53,7 @@ set(LIBCAF_CORE_SRCS
   src/deserializer.cpp
   src/detail/abstract_worker.cpp
   src/detail/abstract_worker_hub.cpp
+  src/detail/affinity.cpp
   src/detail/append_hex.cpp
   src/detail/append_percent_encoded.cpp
   src/detail/behavior_impl.cpp
