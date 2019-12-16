@@ -248,6 +248,32 @@ public:
   static constexpr bool value = std::is_same<bool, result_type>::value;
 };
 
+template <class T> class HasMemberType_value_type {
+private:
+  using Yes = char[2];
+  using No = char[1];
+
+  struct Fallback {
+    struct value_type {};
+  };
+  struct Derived : T, Fallback {};
+
+  template <class U> static No &test(typename U::value_type *);
+  template <typename U> static Yes &test(U *);
+
+public:
+  static constexpr bool RESULT = sizeof(test<Derived>(nullptr)) == sizeof(Yes);
+};
+
+template <typename T, typename T2 = void>
+struct has_member_type_value_type
+    : public std::integral_constant<bool, HasMemberType_value_type<T>::RESULT> {
+};
+template <typename T>
+struct has_member_type_value_type<
+    T, typename std::enable_if<!std::is_class<T>::value>::type>
+    : std::false_type {};
+
 /// Checks whether `T` has `begin()` and `end()` member
 /// functions returning forward iterators.
 template <class T>
@@ -267,7 +293,8 @@ class is_iterable {
 
 public:
   static constexpr bool value = is_primitive<T>::value == false
-                                && std::is_same<bool, result_type>::value;
+                                && std::is_same<bool, result_type>::value
+                                && has_member_type_value_type<T>::value;
 };
 
 template <class T>
