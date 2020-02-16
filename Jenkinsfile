@@ -29,26 +29,9 @@ config = [
     ],
     // Our build matrix. Keys are the operating system labels and values are build configurations.
     buildMatrix: [
-        // Various Linux builds for debug and release.
-        ['debian-8', [
-            builds: ['debug', 'release'],
-            tools: ['clang-4'],
-        ]],
-        ['centos-6', [
-            builds: ['debug', 'release'],
-            tools: ['gcc-7'],
-        ]],
-        ['centos-7', [
-            builds: ['debug', 'release'],
-            tools: ['gcc-7'],
-        ]],
-        ['ubuntu-16.04', [
-            builds: ['debug', 'release'],
-            tools: ['clang-4'],
-        ]],
-        ['ubuntu-18.04', [
-            builds: ['debug', 'release'],
-            tools: ['gcc-7'],
+        ['Linux', [
+            builds: ['debug'],
+            tools: ['gcc7'],
         ]],
         // On Fedora 28, our debug build also produces the coverage report.
         ['fedora-28', [
@@ -58,7 +41,7 @@ config = [
         ]],
         ['fedora-28', [
             builds: ['release'],
-            tools: ['gcc-8'],
+            tools: ['gcc8'],
         ]],
         // Other UNIX systems.
         ['macOS', [
@@ -147,6 +130,24 @@ pipeline {
             agent { label 'clang-format' }
             steps {
                 runClangFormat(config)
+            }
+        }
+        stage('Check Consistency') {
+            agent { label 'unix' }
+            steps {
+                deleteDir()
+                unstash('sources')
+                dir('sources') {
+                    cmakeBuild([
+                        buildDir: 'build',
+                        installation: 'cmake in search path',
+                        sourceDir: '.',
+                        steps: [[
+                            args: '--target consistency-check',
+                            withCmake: true,
+                        ]],
+                    ])
+                }
             }
         }
         stage('Build') {
