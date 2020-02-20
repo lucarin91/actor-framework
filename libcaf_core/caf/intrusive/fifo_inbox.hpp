@@ -77,6 +77,11 @@ public:
     return queue_.total_task_size();
   }
 
+  /// Constant version of the size method.
+  size_t csize() const {
+    return queue_.total_task_size();
+  }
+
   /// Queries whether the inbox is empty.
   bool empty() const noexcept {
     return queue_.empty() && inbox_.empty();

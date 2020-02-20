@@ -76,6 +76,10 @@ public:
   /// This `enqueue` variant allows to define forwarding chains.
   virtual void enqueue(mailbox_element_ptr what, execution_unit* host) = 0;
 
+  virtual size_t queue_size() {
+    return -1;
+  }
+
   /// Attaches `ptr` to this actor. The actor will call `ptr->detach(...)` on
   /// exit, or immediately if it already finished execution.
   virtual void attach(attachable_ptr ptr) = 0;
