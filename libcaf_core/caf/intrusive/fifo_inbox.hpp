@@ -36,6 +36,7 @@
 #include "caf/intrusive/new_round_result.hpp"
 
 #include "caf/detail/enqueue_result.hpp"
+#include "caf/detail/shared_spinlock.hpp"
 
 namespace caf::intrusive {
 
@@ -78,8 +79,17 @@ public:
   }
 
   /// Constant version of the size method.
-  size_t csize() const {
-    return queue_.total_task_size();
+  size_t synchronized_size() noexcept {
+    size_t size = queue_.total_task_size();
+    node_pointer head = inbox_.get_head();
+    if (head == nullptr){
+      return size;
+    }
+    std::unique_lock<caf::detail::shared_spinlock> guard(spin_lock_);
+    for(head = inbox_.get_head(); head != nullptr; head = head->next) {
+      size += 1;
+    }
+    return size;
   }
 
   /// Queries whether the inbox is empty.
@@ -140,8 +150,10 @@ public:
   /// Tries to get more items from the inbox.
   bool fetch_more() {
     node_pointer head = inbox_.take_head();
-    if (head == nullptr)
+    if (head == nullptr) {
       return false;
+    }
+    std::unique_lock<caf::detail::shared_spinlock> guard(spin_lock_);
     do {
       auto next = head->next;
       queue_.lifo_append(lifo_inbox_type::promote(head));
@@ -232,6 +244,8 @@ private:
 
   /// User-facing queue that is constantly resupplied from the inbox.
   queue_type queue_;
+
+  caf::detail::shared_spinlock spin_lock_;
 };
 
 } // namespace caf

@@ -151,7 +151,7 @@ scheduled_actor::~scheduled_actor() {
 // -- overridden functions of abstract_actor -----------------------------------
 
 size_t scheduled_actor::queue_size() {
-    return mailbox().csize();
+    return mailbox().synchronized_size();
 }
 
 void scheduled_actor::enqueue(mailbox_element_ptr ptr, execution_unit* eu) {
