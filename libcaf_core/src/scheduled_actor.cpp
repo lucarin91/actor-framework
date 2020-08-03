@@ -187,6 +187,11 @@ void scheduled_actor::enqueue(mailbox_element_ptr ptr, execution_unit* eu) {
       break;
   }
 }
+
+size_t scheduled_actor::queue_size() {
+    return mailbox().synchronized_size();
+}
+
 mailbox_element* scheduled_actor::peek_at_next_mailbox_element() {
   return mailbox().closed() || mailbox().blocked() ? nullptr : mailbox().peek();
 }

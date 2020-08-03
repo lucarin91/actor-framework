@@ -167,5 +167,13 @@ inline void anon_send_exit(const weak_actor_ptr& to, exit_reason reason) {
     anon_send_exit(ptr, reason);
 }
 
+// -- Utility function --------------------------------------------
+
+template <class Dest>
+detail::enable_if_t<!std::is_same<group, Dest>::value, size_t>
+receiver_queue_size(const Dest& dest) {
+  return dest->queue_size();
+}
+
 } // namespace caf
 

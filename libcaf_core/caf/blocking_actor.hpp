@@ -247,6 +247,8 @@ public:
 
   void enqueue(mailbox_element_ptr, execution_unit*) override;
 
+  size_t queue_size() override;
+
   mailbox_element* peek_at_next_mailbox_element() override;
 
   // -- overridden functions of local_actor ------------------------------------

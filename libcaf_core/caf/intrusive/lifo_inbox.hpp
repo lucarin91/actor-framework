@@ -157,6 +157,14 @@ public:
     return nullptr;
   }
 
+  pointer get_head() {
+    pointer e = stack_.load();
+    if (e == stack_empty_tag() || e == reader_blocked_tag() || e == stack_closed_tag()) {
+      return nullptr;
+    }
+    return e;
+  }
+  
   /// Sets the head to `stack_empty_tag()` and returns the previous head if
   /// the queue was not empty.
   pointer take_head() noexcept {
